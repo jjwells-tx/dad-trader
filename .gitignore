@@ -1,0 +1,6 @@
+data/sheets/
+data/*.db
+out/
+__pycache__/
+.pytest_cache/
+*.pyc
