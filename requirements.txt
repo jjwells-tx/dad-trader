@@ -1,3 +1,6 @@
 pytest>=8
 # optional: live prices
 # yfinance>=0.2
+# optional: Google Sheets sync (python -m trader sync)
+# google-auth>=2
+# requests

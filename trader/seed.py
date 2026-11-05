@@ -1,6 +1,6 @@
 """Load Dad's per-stock sheet exports (CSV) into the ledger."""
 import glob, json
-from datetime import date
+from datetime import date, datetime
 from .db import connect, TIERS
 from .sheets import parse_sheet
 from .history import trades_from_lots, infer_basis, by_account
@@ -27,7 +27,7 @@ def classify(lots, trades, today):
     return "system", None
 
 
-def seed(sheet_glob="data/sheets/*.csv", db_path="data/trader.db", as_of=None):
+def seed(sheet_glob="data/sheets/*.csv", db_path="data/trader.db", as_of=None, source="CSV export"):
     as_of = as_of or date.today().isoformat()
     con = connect(db_path)
     for t in ("stocks", "positions", "basis_changes", "lots", "prices"):
@@ -60,5 +60,7 @@ def seed(sheet_glob="data/sheets/*.csv", db_path="data/trader.db", as_of=None):
         if m.get("current_price"):
             con.execute("INSERT OR REPLACE INTO prices VALUES (?,?,?,?)", (m["ticker"], as_of, m["current_price"], "sheet"))
         loaded.append(m["ticker"])
+    con.execute("INSERT OR REPLACE INTO meta VALUES ('positions_source', ?)", (source,))
+    con.execute("INSERT OR REPLACE INTO meta VALUES ('positions_loaded', ?)", (datetime.now().strftime("%Y-%m-%d %H:%M"),))
     con.commit()
     return loaded, skipped

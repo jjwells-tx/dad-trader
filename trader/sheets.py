@@ -30,8 +30,27 @@ def parse_date(s):
 
 def parse_sheet(path):
     ticker = os.path.splitext(os.path.basename(path))[0]
-    rows = list(csv.reader(open(path, newline="")))
-    rows = [r + [""] * (12 - len(r)) for r in rows]
+    with open(path, newline="") as f:
+        return parse_rows(list(csv.reader(f)), ticker)
+
+
+TICKER_RE = re.compile(r"[A-Z][A-Z.]{0,5}")
+
+
+def detect_ticker(rows):
+    """The ticker as written on the sheet: column B of the first row whose column A is a price (e.g. "280.48,GOOGL,...")."""
+    for r in rows[2:]:
+        if len(r) >= 2 and NUM_RE.fullmatch(r[0].strip()) and TICKER_RE.fullmatch(r[1].strip()):
+            return r[1].strip()
+    return None
+
+
+NUM_RE = re.compile(r"[\d,]+(\.\d+)?")
+
+
+def parse_rows(rows, ticker):
+    """Parse one stock sheet given as a list of rows of cell text (as in a CSV export)."""
+    rows = [list(r) + [""] * (12 - len(r)) for r in rows]
     account = None
     lots, meta, blocks = [], {"ticker": ticker, "newsletters": []}, []
     current_price = None

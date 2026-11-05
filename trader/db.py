@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS tickets (
     fill_px   REAL,
     fill_date TEXT
 );
+
+CREATE TABLE IF NOT EXISTS meta (
+    key    TEXT PRIMARY KEY,   -- positions_source | positions_loaded
+    value  TEXT
+);
 """
 
 TIERS = {2500: 200, 5000: 200, 10000: 400}
