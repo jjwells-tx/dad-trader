@@ -5,6 +5,7 @@ from datetime import date
 from .db import connect
 from .engine import plan_position
 from .prices import latest
+from .chat_widget import WIDGET as CHAT_WIDGET
 
 
 def build_plan(db_path="data/trader.db", levels=2, rounding="nearest"):
@@ -39,7 +40,18 @@ def _rung(r):
     return f'<span class="q">{r["side"].title()} {r["shares"]:,}</span> @ {_px(r["limit"])}' if r else "—"
 
 
-def write_html(plans, path, as_of=None, rounding="nearest"):
+def positions_info(db_path="data/trader.db"):
+    """'Google Sheets, 2026-11-04 08:30' — where the share counts came from and when."""
+    m = {r["key"]: r["value"] for r in connect(db_path).execute("SELECT key, value FROM meta")}
+    return ", ".join(x for x in (m.get("positions_source"), m.get("positions_loaded")) if x) or None
+
+
+def write_html(plans, path, as_of=None, rounding="nearest", positions=None):
+    with open(path, "w") as f:
+        f.write(render_html(plans, as_of, rounding, positions))
+
+
+def render_html(plans, as_of=None, rounding="nearest", positions=None):
     as_of = as_of or date.today().isoformat()
     act = [p for p in plans if p.get("status") == "act_now"]
     review = [p for p in plans if p.get("status") in ("review", "no_price", "hold")]
@@ -105,7 +117,7 @@ tr:last-child td {{ border-bottom:0 }}
 @media print {{ body {{ background:#fff }} .scroll {{ border:0 }} }}
 </style></head><body><main>
 <h1>Rung Sheet — {as_of}</h1>
-<p class="sub">Standing GTC limit orders for each position. Prices: {html.escape(src) or "none"}. Rounding: {rounding}.</p>
+<p class="sub">Standing GTC limit orders for each position. Positions: {html.escape(positions or "unknown")}. Prices: {html.escape(src) or "none"}. Rounding: {rounding}.</p>
 
 <h2>Act now <span class="count">{len(act)} positions already outside their band</span></h2>
 <div class="scroll"><table><thead><tr><th>Account</th><th>Ticker</th><th>Trade</th><th>Limit</th><th>Value</th><th>Basis</th><th>Drift</th></tr></thead>
@@ -121,9 +133,8 @@ When either one fills, the other is stale — regenerate this sheet and replace 
 shown so you can see how the ladder continues. For rows tagged <b>act now</b>, the standing orders assume the act-now trade
 has already filled. Drift is today's value minus basis. Basis and band per position: $2,500 ±$200,
 $5,000 ±$200, $10,000 ±$400; whole shares only.</p>
-</main></body></html>"""
-    with open(path, "w") as f:
-        f.write(doc)
+</main>{CHAT_WIDGET}</body></html>"""
+    return doc
 
 
 def write_orders_csv(plans, path):

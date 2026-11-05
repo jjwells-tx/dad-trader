@@ -1,0 +1,27 @@
+name: CI
+
+# Runs the test suite on every pull request and on pushes to branches other than main.
+# Deploy (deploy.yml) calls this same workflow before shipping, so main is tested again before it goes live.
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"        # same as the EC2 server
+          cache: pip
+      - run: pip install -r requirements.txt google-auth requests
+      - run: python -m pytest -q
+      - name: Shell scripts parse
+        run: bash -n deploy/install.sh && bash -n deploy/update.sh

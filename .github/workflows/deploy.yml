@@ -1,0 +1,61 @@
+name: Deploy
+
+# Every merge to main: run the tests, ship the commit to the EC2 server over SSH, and run deploy/update.sh there.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   EC2_HOST          trader.wellslabs.dev
+#   EC2_USER          ec2-user
+#   EC2_SSH_KEY       private half of the dedicated deploy key (not your personal .pem)
+#   EC2_KNOWN_HOSTS   the server's host key line, so the runner can't be pointed at an impostor
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:          # "Run workflow" button: redeploy main by hand
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false   # never interrupt a deploy halfway
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        env:
+          KEY: ${{ secrets.EC2_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          [[ -n "$KEY" && -n "$KNOWN_HOSTS" ]] || { echo "::error::EC2_SSH_KEY / EC2_KNOWN_HOSTS secrets are not set"; exit 1; }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host ec2\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/deploy\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  ServerAliveInterval 30\n' \
+            "${{ secrets.EC2_HOST }}" "${{ secrets.EC2_USER }}" > ~/.ssh/config
+
+      - name: Ship this commit to the server
+        run: |
+          git archive --format=tar HEAD | ssh ec2 "set -e; d=~/releases/${GITHUB_SHA}; rm -rf \$d; mkdir -p \$d; tar -x -C \$d"
+
+      - name: Install and restart
+        run: ssh ec2 "bash ~/releases/${GITHUB_SHA}/deploy/update.sh ${GITHUB_SHA}"
+
+      - name: Site is up
+        run: |
+          # The site is behind a password, so a healthy server answers 401 without credentials.
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://${{ secrets.EC2_HOST }}/")
+          echo "https://${{ secrets.EC2_HOST }}/ -> HTTP $code"
+          [[ "$code" == 401 || "$code" == 200 ]]
+
+      - name: Summary
+        if: always()
+        run: echo "Deployed \`${GITHUB_SHA::7}\` to ${{ secrets.EC2_HOST }} — ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"

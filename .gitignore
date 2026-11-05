@@ -4,3 +4,11 @@ out/
 __pycache__/
 .pytest_cache/
 *.pyc
+service-account*.json
+*.sa.json
+data/sheets.new/
+data/sheets.old/
+gemini.env
+.venv/
+bot.sh
+*.env
